@@ -42,19 +42,16 @@ void run_cd(char *args[], int argsc, int *previous_fd)
     }
 
     int departing_fd = open_current_directory();
-    if (departing_fd < 0) {
-        perror("cd: cannot remember current directory");
-        return;
-    }
-
     int result = use_previous ? fchdir(*previous_fd) : chdir(target);
     if (result == -1) {
         perror("cd");
-        close(departing_fd);
+        if (departing_fd >= 0) {
+            close(departing_fd);
+        }
         return;
     }
 
-    // Keep the old history until the move succeeds, including a move via cd -.
+    // If opening the directory we left failed, -1 clears the older history.
     if (*previous_fd >= 0) {
         close(*previous_fd);
     }
