@@ -12,7 +12,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdbool.h>
-#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -42,7 +41,8 @@ static inline void reap(void)
 ///Shell I/O and related functions (add more as appropriate)
 void read_command_line(char line[]);
 void construct_shell_prompt(void);
-void run_cd(char *args[], int argsc, char previous[PATH_MAX]);
+int open_current_directory(void);
+void run_cd(char *args[], int argsc, int *previous_fd);
 void parse_command(char line[], char *args[], int *argsc);
 
 ///Child functions (add more as appropriate)

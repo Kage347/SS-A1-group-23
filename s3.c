@@ -2,49 +2,63 @@
 
 void construct_shell_prompt(void)
 {
-    char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof cwd) != NULL) {
+    // On macOS, getcwd allocates enough space for the full physical path.
+    char *cwd = getcwd(NULL, 0);
+    if (cwd != NULL) {
         printf("[%s s3]$ ", cwd);
+        free(cwd);
     } else {
         fputs("[? s3]$ ", stdout);
     }
     fflush(stdout);
 }
 
-void run_cd(char *args[], int argsc, char previous[PATH_MAX])
+int open_current_directory(void)
 {
-    const char *target;
+#ifdef O_SEARCH
+    return open(".", O_SEARCH | O_DIRECTORY | O_CLOEXEC);
+#else
+    return open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+#endif
+}
+
+void run_cd(char *args[], int argsc, int *previous_fd)
+{
     if (argsc > 2) {
         fputs("cd: too many arguments\n", stderr);
         return;
     }
-    if (argsc == 1) {
+    const char *target = args[ARG_1];
+    bool use_previous = target != NULL && strcmp(target, "-") == 0;
+    if (target == NULL) {
         target = getenv("HOME");
         if (target == NULL || target[0] == '\0') {
             fputs("cd: HOME is unset or empty\n", stderr);
             return;
         }
-    } else if (strcmp(args[ARG_1], "-") == 0) {
-        if (previous[0] == '\0') {
-            fputs("cd: previous directory unavailable\n", stderr);
-            return;
-        }
-        target = previous;
-    } else {
-        target = args[ARG_1];
-    }
-
-    char departing[PATH_MAX];
-    if (getcwd(departing, sizeof departing) == NULL) {
-        // A removed directory can still be left, but has no path to remember.
-        departing[0] = '\0';
-    }
-    if (chdir(target) == -1) {
-        perror("cd");
+    } else if (use_previous && *previous_fd < 0) {
+        fputs("cd: previous directory unavailable\n", stderr);
         return;
     }
-    // Only a successful move changes where the next cd - should go.
-    strcpy(previous, departing);
+
+    int departing_fd = open_current_directory();
+    if (departing_fd < 0) {
+        perror("cd: cannot remember current directory");
+        return;
+    }
+
+    int result = use_previous ? fchdir(*previous_fd) : chdir(target);
+    if (result == -1) {
+        perror("cd");
+        close(departing_fd);
+        return;
+    }
+
+    // Keep the old history until the move succeeds, including a move via cd -.
+    if (*previous_fd >= 0) {
+        close(*previous_fd);
+    }
+    *previous_fd = departing_fd;
 }
 
 void read_command_line(char line[])

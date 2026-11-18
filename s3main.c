@@ -13,10 +13,7 @@ int main(void)
     ///Stores the number of arguments
     int argsc;
 
-    char previous[PATH_MAX];
-    if (getcwd(previous, sizeof previous) == NULL) {
-        previous[0] = '\0';
-    }
+    int previous_fd = open_current_directory();
 
     while (1) {
         read_command_line(line);
@@ -27,7 +24,7 @@ int main(void)
 
         if (argsc > 0 && strcmp(args[ARG_PROGNAME], "cd") == 0) {
             // cd changes this shell's directory and creates no child to reap.
-            run_cd(args, argsc, previous);
+            run_cd(args, argsc, &previous_fd);
             continue;
         }
 
