@@ -1,28 +1,46 @@
-# s3 shell · Task 3 study reference
+# s3 · Commands with pipes
 
-This AI-written Task 3 study reference builds on the lecturer’s scaffold and Hanns’s earlier command execution and redirection implementation.
+`s3` is a Unix shell written in C for a paired Software Systems assignment at Imperial College London. This personal branch contains an AI-written study reference for Task 4, built on the signed-off Task 3 reference. The lecturer supplied the starter shell and pipe examples. Hanns Lim implemented the original foreground commands and file redirection. [Assignment §4](https://sarimbaig01.github.io/elec50014/Docs/Assignment1.html#p4) · [Lecture 3 pipe example](https://github.com/sarimbaig01/ss/blob/b1532618d3c05c1514c78913472e6393ad98e409/class_codes/lec3/pipe2.c) · [Hanns’s implementation](https://github.com/Kage347/SS-A1-group-23/commit/5caf45f4db22727152ff443a6cd8f7b3d04ed9e6) · [Task 3 reference](https://github.com/Kage347/SS-A1-group-23/tree/86d0489eefad87d026aa8016f7866357fa4e5757)
 
-## Build and verify
+## Build and try it
 
-From this branch on macOS, run:
+From this checkout, run the following in your usual shell on macOS or Linux.
 
 ```sh
-cc -std=c11 -Wall -Wextra -Wpedantic s3main.c s3.c -o s3
-python3 tests/task3_reference.py ./s3
-python3 tests/task3_deep.py ./s3
-python3 tests/task3_permissions.py ./s3
-./s3
+cc -std=c11 -Wall -Wextra -Wpedantic -Werror s3main.c s3.c -o s3
+binary="$PWD/s3"
+demo=$(mktemp -d)
+mkdir "$demo/txt"
+printf '%s\n' 'burning coal' 'cold rain' 'burning field' 'burning ash' > "$demo/txt/phrases.txt"
+(cd "$demo" && LC_ALL=C "$binary")
 ```
 
-To try the feature interactively, start in the repository root. Run `cd docs`, then `/bin/pwd`. The prompt and the command should both show the repository’s `docs` directory. Run `cd -` to return to the repository root. Bare `cd` takes you to the directory in `HOME`.
+Enter these commands at the `s3` prompt.
 
-## Trace a directory change
+```sh
+cat txt/phrases.txt | sort > txt/phrases_sorted.txt
+cat txt/phrases_sorted.txt
+tr a-z A-Z < txt/phrases.txt | grep BURN | sort | wc -l
+exit
+```
 
-1. In `s3main.c`, `main` remembers the startup directory. It recognises the exact command name `cd` after tokenisation and runs the built-in in the shell process. There is no child to wait for. The next external command inherits the location selected by this shell.
-2. In `s3.c`, `run_cd` tries to open the directory it is leaving. It uses `chdir` for an explicit path or `HOME`, and `fchdir` for the remembered directory. A failed move preserves history. A successful move replaces it with the directory just left, or marks history unavailable if that directory could not be opened. If you move from A to B, fail to enter a missing directory, and run `cd -` twice, you visit A and then B.
-3. Before the next input, `construct_shell_prompt` calls `getcwd` and prints the current physical directory. The first `cd -` can stay in the startup directory. If the shell cannot resolve its current directory, the prompt shows `?`. It can still leave an unlinked directory using an absolute path.
-4. A redirected external command still uses Hanns’s child process path. After a successful `cd`, a relative output filename resolves in the new directory. The child's `dup2` sends its output to that file while the shell retains its terminal output.
+The first command creates the output file. The second prints `burning ash`, `burning coal`, `burning field` and `cold rain` on separate lines. The four-stage pipeline prints `3`.
 
-## Scope
+## Why every stage starts before the shell waits
 
-This reference implements standalone `cd` with named, relative and absolute paths, `.`, `..`, home and previous-directory handling. Extra arguments and unset or empty `HOME` produce a diagnostic. It uses the starter’s space-separated command syntax. Paths containing spaces, shell quoting, redirection on the built-in itself, pipelines and sequential batches fall outside this reference. The prompt obtains the full physical pathname when the OS can resolve it, and `cd -` can return even when that name is too long for a single `chdir` call.
+A pipe has a finite buffer. A small producer can write its entire output and exit before its consumer starts. A larger producer fills the buffer and blocks in `write`. If the parent were waiting for the producer to exit, it would never start the consumer that could drain the buffer. In `launch_pipeline`, the shell starts every stage before calling `wait_for_stages`. The parent closes each write end after the producing child forks and keeps the read end only until the next child forks. Once the last writer closes, the consumer can read EOF. [Pipeline launcher](s3main.c) · [Child execution and redirection](s3.c)
+
+Each stage can use one file redirection. The child connects its pipes first and then applies `<`, `>` or `>>`. For example, in `cat input | sort > saved | wc -l`, `sort` writes to `saved` and `wc` reads EOF and prints zero. Standalone `cd` changes the shell’s directory. Inside a pipeline, `cd` and `exit` affect only their stage.
+
+## Verify
+
+Run these from the checkout as an ordinary user. The tests use temporary fixtures. The pipeline suite puts a deadline on commands that would hang if a pipe end leaked or the parent waited too early.
+
+```sh
+python3 -B tests/task4_pipes.py ./s3
+python3 -B tests/task3_reference.py ./s3
+python3 -B tests/task3_deep.py ./s3
+python3 -B tests/task3_permissions.py ./s3
+```
+
+The inherited input buffer is 1,024 bytes and each stage allows 127 tokens including its command. Pipeline length is bounded by that input and available system resources. Separate a redirection operator and its filename with whitespace. Quoting, escaping, sequential batches and job control are outside this reference.

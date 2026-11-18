@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <errno.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -29,30 +31,20 @@ enum ArgIndex
     ARG_3,
 };
 
-///With inline functions, the compiler replaces the function call 
-///with the actual function code;
-///inline improves speed and readability; meant for short functions (a few lines).
-///the static here avoids linker errors from multiple definitions (needed with inline).
-static inline void reap(void)
-{
-    wait(NULL);
-}
+typedef struct {
+    char *args[MAX_ARGS];
+    int argsc;
+    enum { EXTERNAL_COMMAND, BUILTIN_CD, BUILTIN_EXIT } kind;
+    int redirect_index;
+    pid_t pid;
+} Stage;
 
-///Shell I/O and related functions (add more as appropriate)
 void read_command_line(char line[]);
 void construct_shell_prompt(void);
 int open_current_directory(void);
 void run_cd(char *args[], int argsc, int *previous_fd);
-void parse_command(char line[], char *args[], int *argsc);
+bool parse_stage(char *text, Stage *stage, bool standalone);
+void connect_stream(int fd, int stream);
+_Noreturn void execute_child(Stage *stage, int previous_fd);
 
-///Child functions (add more as appropriate)
-void child(char *args[], int argsc);
-
-///Program launching functions (add more as appropriate)
-void launch_program(char *args[], int argsc);
-void launch_program_with_redirection(char *args[], int argsc);
-bool command_with_redirection(char line[]);
-int find_redirection_operator(char *args[], int argsc);
-void child_with_output_redirected(char *args[], int argsc, int op_index);
-void child_with_input_redirected(char *args[], int argsc, int op_index);
 #endif
