@@ -1,26 +1,66 @@
 #include "s3.h"
 
-///Simple for now, but will be expanded in a following section
-void construct_shell_prompt(char shell_prompt[])
+void construct_shell_prompt(void)
 {
-    strcpy(shell_prompt, "[s3]$ ");
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof cwd) != NULL) {
+        printf("[%s s3]$ ", cwd);
+    } else {
+        fputs("[? s3]$ ", stdout);
+    }
+    fflush(stdout);
 }
 
-///Prints a shell prompt and reads input from the user
+void run_cd(char *args[], int argsc, char previous[PATH_MAX])
+{
+    const char *target;
+    if (argsc > 2) {
+        fputs("cd: too many arguments\n", stderr);
+        return;
+    }
+    if (argsc == 1) {
+        target = getenv("HOME");
+        if (target == NULL || target[0] == '\0') {
+            fputs("cd: HOME is unset or empty\n", stderr);
+            return;
+        }
+    } else if (strcmp(args[ARG_1], "-") == 0) {
+        if (previous[0] == '\0') {
+            fputs("cd: previous directory unavailable\n", stderr);
+            return;
+        }
+        target = previous;
+    } else {
+        target = args[ARG_1];
+    }
+
+    char departing[PATH_MAX];
+    if (getcwd(departing, sizeof departing) == NULL) {
+        // A removed directory can still be left, but has no path to remember.
+        departing[0] = '\0';
+    }
+    if (chdir(target) == -1) {
+        perror("cd");
+        return;
+    }
+    // Only a successful move changes where the next cd - should go.
+    strcpy(previous, departing);
+}
+
 void read_command_line(char line[])
 {
-    char shell_prompt[MAX_PROMPT_LEN];
-    construct_shell_prompt(shell_prompt);
-    printf("%s", shell_prompt);
+    construct_shell_prompt();
 
     ///See man page of fgets(...)
     if (fgets(line, MAX_LINE, stdin) == NULL)
     {
+        if (feof(stdin)) {
+            exit(EXIT_SUCCESS);
+        }
         perror("fgets failed");
         exit(1);
     }
-    ///Remove newline (enter)
-    line[strlen(line) - 1] = '\0';
+    line[strcspn(line, "\n")] = '\0';
 }
 
 void parse_command(char line[], char *args[], int *argsc)
@@ -45,6 +85,7 @@ void parse_command(char line[], char *args[], int *argsc)
 ///Launch related functions
 void child(char *args[], int argsc)
 {
+    (void)argsc;  // execvp reads args up to its terminating null pointer.
     execvp(args[ARG_PROGNAME], args);
     perror("execvp");
 }
