@@ -1,7 +1,5 @@
 # s3 shell · Task 3 study reference
 
-This branch contains an AI-written reference implementation of the `cd` built-in for a small C shell. It was created for personal study in Ahsan’s fork. The starting code includes the lecturer’s shell scaffold and Hanns’s basic command execution and redirection. The original Task 3 acceptance record at `a5ac9b3` describes the shell before this implementation.
-
 ## Build and verify
 
 From this branch on macOS, run:
